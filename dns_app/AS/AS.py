@@ -2,6 +2,7 @@ import socket
 import json
 import logging
 import os
+import threading
 from datetime import datetime
 
 logging.basicConfig(
@@ -19,6 +20,8 @@ class AuthoritativeServer:
         self.port = port
         self.db_file = db_file
         self.records = {}
+        self.running = False
+        self.server_thread = None
         self.load_records()
 
     def load_records(self):
@@ -116,27 +119,65 @@ class AuthoritativeServer:
             logging.warning(f"Unrecognized message format: {message}")
             return None
 
-    def start(self):
+    def server_loop(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(('0.0.0.0', self.port))
-        logging.info(f"Authoritative Server started on UDP port {self.port}")
-
         try:
-            while True:
-                data, addr = sock.recvfrom(1024)
-                logging.info(f"Connection from {addr}")
+            sock.bind(('0.0.0.0', self.port))
+            logging.info(
+                f"Authoritative Server started on UDP port {self.port}")
 
-                response = self.handle_client(data, addr)
+            while self.running:
+                try:
+                    sock.settimeout(0.5)
+                    data, addr = sock.recvfrom(1024)
+                    logging.info(f"Connection from {addr}")
 
-                if response:
-                    sock.sendto(response.encode(), addr)
-        except KeyboardInterrupt:
-            logging.info("Server shutting down")
+                    response = self.handle_client(data, addr)
+
+                    if response:
+                        sock.sendto(response.encode(), addr)
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    logging.error(f"Error handling client: {str(e)}")
+        except Exception as e:
+            logging.error(f"Server error: {str(e)}")
         finally:
             sock.close()
-            self.save_records()
+            logging.info("Server socket closed")
+
+    def start(self):
+        if self.running:
+            logging.warning("Server is already running")
+            return
+
+        self.running = True
+        self.server_thread = threading.Thread(target=self.server_loop)
+        self.server_thread.daemon = True
+        self.server_thread.start()
+        logging.info("Server thread started")
+
+    def stop(self):
+        if not self.running:
+            logging.warning("Server is not running")
+            return
+
+        logging.info("Stopping server...")
+        self.running = False
+        if self.server_thread:
+            self.server_thread.join(timeout=5)
+        self.save_records()
+        logging.info("Server stopped")
 
 
 if __name__ == "__main__":
     server = AuthoritativeServer()
     server.start()
+
+    try:
+        import time
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logging.info("Received keyboard interrupt, shutting down")
+        server.stop()
