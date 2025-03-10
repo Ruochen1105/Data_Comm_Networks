@@ -2,6 +2,11 @@ from flask import Flask, request, jsonify
 import socket
 import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 app = Flask(__name__)
 
 hostname = None

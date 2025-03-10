@@ -5,6 +5,11 @@ import logging
 
 app = Flask(__name__)
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 
 @app.route('/fibonacci', methods=['GET'])
 def get_fibonacci():
